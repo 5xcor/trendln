@@ -37,16 +37,24 @@ resistance information including local extrema, average and their
 trend lines using several different methods:
 
 	import trendln
-	# this will serve as an example for security or index closing prices
+	# this will serve as an example for security or index closing prices, or low and high prices
 	import yfinance as yf # requires yfinance - pip install yfinance
 	tick = yf.Ticker('^GSPC') # S&P500
 	hist = tick.history(period="max", rounding=True)
-	minimaIdxs, maximaIdxs, pmin, pmax, mintrend, maxtrend, minwindows, maxwindows =
-		calc_support_resistance(hist[-1000:].Close)
-	minimaIdxs, maximaIdxs, pmin, pmax, mintrend, maxtrend, minwindows, maxwindows =
-		calc_support_resistance(
-		# list of data as float
-		hist,
+	h = hist[-1000:].Close
+	mins, maxs = trendln.calc_support_resistance(h)
+	minimaIdxs, pmin, mintrend, minwindows = trendln.calc_support_resistance((hist[-1000:].Low, None)) #support only
+	mins, maxs = trendln.calc_support_resistance((hist[-1000:].Low, hist[-1000:].High))
+	(minimaIdxs, pmin, mintrend, minwindows), (maximaIdxs, pmax, maxtrend, maxwindows) = mins, maxs
+
+Documentation for usage:
+
+	(minimaIdxs, pmin, mintrend, minwindows), (maximaIdxs, pmax, maxtrend, maxwindows) = \
+		trendln.calc_support_resistance(
+		# list/numpy ndarray/pandas Series of data as bool/int/float and if not a list also unsigned
+		# or 2-tuple (support, resistance) where support and resistance are 1-dimensional array-like or one or the other is None
+		# can calculate only support, only resistance, both for different data, or both for identical data
+		h,
 
 		# METHOD_NAIVE - any local minima or maxima only for a single interval (currently requires pandas)
 		# METHOD_NAIVECONSEC - any local minima or maxima including those for consecutive constant intervals (currently requires pandas)
@@ -67,19 +75,20 @@ trend lines using several different methods:
 		errpct = 0.005,
 		
 		# for all METHOD_*HOUGH*, the smallest unit increment for discretization e.g. cents/pennies 0.01
-		hough_scale=0.01
+		hough_scale=0.01,
 		
 		# only for METHOD_PROBHOUGH, number of iterations to run
 		hough_prob_iter=10,
 		
 		# sort by area under wrong side of curve, otherwise sort by slope standard error
-		sortError=False)
+		sortError=False,
+		
+		# accuracy if using METHOD_NUMDIFF for example 5-point stencil is accuracy=3
+		accuracy=1)
+	# if h is a 2-tuple with one value as None, then a 2-tuple is not returned, but the appropriate tuple instead
 	# minimaIdxs - sorted list of indexes to the local minima
-	# maximaIdxs - sorted list of indexes to the local maxima
 	# pmin - [slope, intercept] of average best fit line through all local minima points
-	# pmax - [slope, intercept] of average best fit line through all local maxima points
 	# mintrend - sorted list containing (points, result) for local minima trend lines
-	# maxtrend - sorted list containing (points, result) for local maxima trend lines
 		# points - list of indexes to points in trend line
 		# result - (slope, intercept, SSR, slopeErr, interceptErr, areaAvg)
 			# slope - slope of best fit trend line
@@ -90,7 +99,27 @@ trend lines using several different methods:
 			# areaAvg - Reimann sum area of difference between best fit trend line
 			#   and actual data points averaged per time unit
 	# minwindows - list of windows each containing mintrend for that window
+	
+	# maximaIdxs - sorted list of indexes to the local maxima
+	# pmax - [slope, intercept] of average best fit line through all local maxima points
+	# maxtrend - sorted list containing (points, result) for local maxima trend lines
+		#see for mintrend above
 	# maxwindows - list of windows each containing maxtrend for that window
+
+The **get_extrema** function will calculate all of the local minima and local maxima
+without performing the full trend line calculation.
+	
+	minimaIdxs, maximaIdxs = trendln.get_extrema(hist[-1000:].Close)
+	maximaIdxs = trendln.get_extrema((None, hist[-1000:].High)) #maxima only
+	minimaIdxs, maximaIdxs = trendln.get_extrema((hist[-1000:].Low, hist[-1000:].High))
+
+Documentation for usage:	
+
+	minimaIdxs, maximaIdxs = trendln.get_extrema(
+		h,
+		extmethod=METHOD_NUMDIFF,
+		accuracy=1)
+	# parameters and results are as per defined for calc_support_resistance
 
 Plotting Calculations
 ---------------------
@@ -99,9 +128,15 @@ and top 2 support and resistance lines, along with marking extrema used with
 a maximum history length, and otherwise identical arguments to the
 calculation function.
 
-	fig = plot_support_resistance(hist[-1000:].Close) # requires matplotlib - pip install matplotlib
-	fig = plot_support_resistance(
-		hist,
+	fig = trendln.plot_support_resistance(hist[-1000:].Close) # requires matplotlib - pip install matplotlib
+	plt.savefig('suppres.svg', format='svg')
+	plt.show()
+	plt.clf() #clear figure
+	
+Documentation for usage:
+
+	fig = trendln.plot_support_resistance(
+		hist, #as per h for calc_support_resistance
 		xformatter = None, #x-axis data formatter turning numeric indexes to display output
 		  # e.g. ticker.FuncFormatter(func) otherwise just display numeric indexes
 		numbest = 2, #number of best support and best resistance lines to display
@@ -112,14 +147,24 @@ calculation function.
 		window=125,
 		errpct = 0.005,
 		hough_prob_iter=10,
-		sortError=False)
+		sortError=False,
+		accuracy=1)
+	# other parameters as per calc_support_resistance
 	# fig - returns matplotlib.pyplot.gcf() or the current figure
+	
+The **plot_sup_res_date** function will do the same as **plot_support_resistance** with
+help for nice formatting of dates based on a pandas date index.
+	
+	idx = hist[-1000:].index
+	fig = trendln.plot_sup_res_date((hist[-1000:].Low, hist[-1000:].High), idx) #requires pandas
 	plt.savefig('suppres.svg', format='svg')
 	plt.show()
+	plt.clf() #clear figure
 	
-	fig = plot_sup_res_date(hist[-1000:].Close, hist[-1000:].index) #requires pandas
-	fig = plot_sup_res_date( #automatic date formatter based on US trading calendar
-		hist,
+Documentation for usage:
+
+	fig = trendln.plot_sup_res_date( #automatic date formatter based on US trading calendar
+		hist, #as per h for calc_support_resistance
 		idx, #date index from pandas
 		numbest = 2,
 		fromwindows = True,
@@ -130,9 +175,18 @@ calculation function.
 		errpct = 0.005,
 		hough_scale=0.01,
 		hough_prob_iter=10,
-		sortError=False)
+		sortError=False,
+		accuracy=1)
+	# other parameters as per plot_support_resistance
+
+Finally, for the above mentioned article, some figures were generated for reference material,
+while others use the library to demonstrate how it works.  These can be generated as well:
 	
-	plot_sup_res_learn( #draw learning figures, included for reference material only
+	trendln.plot_sup_res_learn('.', hist)
+
+Documentation for usage:
+
+	trendln.plot_sup_res_learn( #draw learning figures, included for reference material only
 		curdir, #base output directory for png and svg images, will be saved in 'data' subfolder
 		hist) #pandas DataFrame containing Close and date index
 	
